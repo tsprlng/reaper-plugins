@@ -1,0 +1,49 @@
+desc: MIDI Equal Temperament Translator
+
+// This plugin tries to let you play in different equal-temperament scales despite MIDI's inherent 12-ness.
+// Given a normal MIDI controller or piano roll, and a normal synth, this stands in the middle.
+// It will adjust the pitch bend (by knowing the range the synth bends over) to hit the new notes by missing the old ones by the correct amount.
+// To use this polyphonically you may need the MIDI Poly Scattergun earlier in the chain.
+
+slider1:31<2,51,1>Tones per octave
+slider2:500<500,6000,500>Pitch bend range (+/- cents)
+slider3:60<0,127,1>Centre note value
+
+in_pin:none
+out_pin:none
+
+@init
+
+@slider
+	slider1 = floor(slider1 + 0.5);
+	tonesPerOctave = slider1;
+	bendRangeCents = slider2;
+	centreNote = slider3;
+
+	on != 1 ? (
+		on = 1;
+	);
+
+@block
+	on ? (while (midirecv(offset, msg1, msg2, msg3) > 0) (
+
+		(msg1 & $xf0)==$x90 && msg3!=0 ? (  // note on! so, bend the pitch before it happens...
+			channel = msg1 % 16;
+			noteIn = msg2;
+
+			note12Frac = centreNote + (noteIn - centreNote) * 12 / tonesPerOctave;
+			note12 = floor(note12Frac);
+			bendFrac = note12Frac - note12;
+			bendFrac > 0.5 ? (
+				note12 = note12 + 1;
+				bendFrac = bendFrac - 1;  // so now, it's +/- 0.5
+			);
+
+			bendness = 8192 + (bendFrac / 0.5) * (500 / bendRangeCents) * 8192;
+			midisend(offset, $xe0 + channel, bendness % 128, bendness / 128);  // $xe_ = bend; params: lsb, msb (!)
+			midisend(offset, msg1, note12, msg3);
+		) : (
+			midisend(offset, msg1, msg2, msg3);  // always pass everything else through
+		)
+
+	) );
