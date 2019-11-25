@@ -1,0 +1,200 @@
+desc: MIDI Poly Scattergun
+
+// This plugin distributes incoming poly notes over different mono channels.
+// It's useful before the Temperament Translator, so the pitch bends on individual channels don't affect each other.
+
+slider1:1<1,16,1>Minimum channel
+slider2:16<1,16,1>Maximum channel
+
+in_pin:none
+out_pin:none
+
+@init
+	ofCN = 100;
+	ofFC = 200;
+	ofUC = 300;
+
+	ii = 0;
+	while (ii < 17) (
+		channelNote[ofCN+ii] = -1;
+		freeChannel[ofFC+ii] = -1;
+		usedChannel[ofUC+ii] = -1;
+		ii += 1;
+	);
+	minChannel = 0;
+	maxChannel = 0;
+	freeChannel[ofFC+0] = 0;
+	on = 1;
+
+	function queueRemove(base, val) local(ii jj) (
+		ii = 0;
+		jj = 0;
+		while (jj == 0 && q[base + ii] != -1) (
+			(q[base + ii] == val) ? (
+				jj = ii;
+				while (q[base + jj] != -1) (
+					q[base + jj] = q[base + jj + 1];
+					jj += 1;
+				);
+			);
+			ii += 1;
+		);
+	);
+
+	function queueAppend(base, val) local(ii jj) (
+		ii = 0;
+		queueRemove(base, val);
+		while (q[base + ii] != -1) (ii += 1;);
+		q[base + ii] = val;
+	);
+
+	function forgetChannel(chan) local(ii) (
+		// TODO all notes off?
+		queueRemove(ofFC, chan);
+		queueRemove(ofUC, chan);
+		channelNote[ofCN+chan] = -1;
+	);
+
+	notesOn = 0;
+
+@slider
+	ii = minChannel;
+	while (ii < slider1-1) (  // TODO this is all a bit... off.
+		forgetChannel(ii);
+		ii += 1;
+	);
+	ii = slider2 - 1;
+	while (ii <= maxChannel) (
+		forgetChannel(ii);
+		ii += 1;
+	);
+	ii = slider1 - 1;
+	while (ii < minChannel) (
+		queueAppend(ofFC, ii);
+		ii += 1;
+	);
+	ii = maxChannel + 1;
+	while (ii < slider2) (
+		queueAppend(ofFC, ii);
+		ii += 1;
+	);
+	minChannel = slider1 - 1;
+	maxChannel = slider2 - 1;
+
+
+@block
+	on ? (while (midirecv(offset, msg1, msg2, msg3) > 0) (
+
+		((msg1 & $xf0)==$x90) ? (  // note on!
+			channel = -1;
+			noteIn = msg2;
+			notesOn += 1;
+
+			(channel == -1) ? (
+				method = 0;
+				ii = 0;
+				while (channel == -1 && ii < 16) (
+					(channelNote[ofCN+ii] == noteIn) ? (
+						channel = ii;
+						queueAppend(ofUC, channel);
+						midisend(offset, $x80 + channel, noteIn, msg3);  // note off first :\
+					);
+					ii += 1;
+				);
+			);
+
+			(channel == -1) ? (
+				method = 1;
+				(freeChannel[ofFC] != -1) ? (
+					channel = freeChannel[ofFC];
+					queueRemove(ofFC, channel);
+					channelNote[ofCN+channel] = noteIn;
+					queueAppend(ofUC, channel);
+				);
+			);
+
+			(channel == -1) ? (
+				method = 2;
+				(usedChannel[ofUC] != -1) ? (
+					channel = usedChannel[ofUC];
+					channelNote[ofCN+channel] = noteIn;
+					queueAppend(ofUC, channel);
+					midisend(offset, $x80 + channel, noteIn, msg3);  // note off first :\
+				);
+			);
+
+			(channel != -1) ? (
+				midisend(offset, $x90 + channel, msg2, msg3);
+			);
+
+		) : ((msg1 & $xf0) == $x80) ? (  // note off!
+			noteIn = msg2;
+			notesOn -= 1;
+			ii = 0;
+			channel = -1;
+			while (channel == -1 && ii < 16) (
+				(channelNote[ofCN+ii] == noteIn) ? (
+					channel = ii;
+					channelNote[ofCN+channel] = -1;
+					queueRemove(ofUC, channel);
+					queueAppend(ofFC, channel);
+					midisend(offset, $x80 + channel, noteIn, msg3);
+				);
+				ii += 1;
+			);
+
+		) : (
+			midisend(offset, msg1, msg2, msg3);  // always pass everything else through
+		);
+
+		// show queues in debugger...
+		zcn0 = channelNote[ofCN+0];
+		zcn1 = channelNote[ofCN+1];
+		zcn2 = channelNote[ofCN+2];
+		zcn3 = channelNote[ofCN+3];
+		zcn4 = channelNote[ofCN+4];
+		zcn5 = channelNote[ofCN+5];
+		zcn6 = channelNote[ofCN+6];
+		zcn7 = channelNote[ofCN+7];
+		zcn8 = channelNote[ofCN+8];
+		zcn9 = channelNote[ofCN+9];
+		zcn10 = channelNote[ofCN+10];
+		zcn11 = channelNote[ofCN+11];
+		zcn12 = channelNote[ofCN+12];
+		zcn13 = channelNote[ofCN+13];
+		zcn14 = channelNote[ofCN+14];
+		zcn15 = channelNote[ofCN+15];
+		zu0 = usedChannel[ofUC+0];
+		zu1 = usedChannel[ofUC+1];
+		zu2 = usedChannel[ofUC+2];
+		zu3 = usedChannel[ofUC+3];
+		zu4 = usedChannel[ofUC+4];
+		zu5 = usedChannel[ofUC+5];
+		zu6 = usedChannel[ofUC+6];
+		zu7 = usedChannel[ofUC+7];
+		zu8 = usedChannel[ofUC+8];
+		zu9 = usedChannel[ofUC+9];
+		zu10 = usedChannel[ofUC+10];
+		zu11 = usedChannel[ofUC+11];
+		zu12 = usedChannel[ofUC+12];
+		zu13 = usedChannel[ofUC+13];
+		zu14 = usedChannel[ofUC+14];
+		zu15 = usedChannel[ofUC+15];
+		zf0 = freeChannel[ofFC+0];
+		zf1 = freeChannel[ofFC+1];
+		zf2 = freeChannel[ofFC+2];
+		zf3 = freeChannel[ofFC+3];
+		zf4 = freeChannel[ofFC+4];
+		zf5 = freeChannel[ofFC+5];
+		zf6 = freeChannel[ofFC+6];
+		zf7 = freeChannel[ofFC+7];
+		zf8 = freeChannel[ofFC+8];
+		zf9 = freeChannel[ofFC+9];
+		zf10 = freeChannel[ofFC+10];
+		zf11 = freeChannel[ofFC+11];
+		zf12 = freeChannel[ofFC+12];
+		zf13 = freeChannel[ofFC+13];
+		zf14 = freeChannel[ofFC+14];
+		zf15 = freeChannel[ofFC+15];
+
+	) );
