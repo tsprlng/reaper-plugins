@@ -27,7 +27,7 @@ out_pin:none
 @block
 	on ? (while (midirecv(offset, msg1, msg2, msg3) > 0) (
 
-		(msg1 & $xf0)==$x90 && msg3!=0 ? (  // note on! so, bend the pitch before it happens...
+		(msg1 & $xf0)==$x90 ? (  // note on! so, bend the pitch before it happens...
 			channel = msg1 % 16;
 			noteIn = msg2;
 
@@ -41,6 +41,19 @@ out_pin:none
 
 			bendness = 8192 + (bendFrac / 0.5) * (500 / bendRangeCents) * 8192;
 			midisend(offset, $xe0 + channel, bendness % 128, bendness / 128);  // $xe_ = bend; params: lsb, msb (!)
+			midisend(offset, msg1, note12, msg3);
+		) : (msg1 & $xf0)==$x80 ? (  // note off!
+			channel = msg1 % 16;
+			noteIn = msg2;
+
+			note12Frac = centreNote + (noteIn - centreNote) * 12 / tonesPerOctave;
+			note12 = floor(note12Frac);
+			bendFrac = note12Frac - note12;
+			bendFrac > 0.5 ? (
+				note12 = note12 + 1;
+				bendFrac = bendFrac - 1;  // so now, it's +/- 0.5
+			);
+
 			midisend(offset, msg1, note12, msg3);
 		) : (
 			midisend(offset, msg1, msg2, msg3);  // always pass everything else through
