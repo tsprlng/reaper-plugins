@@ -1,0 +1,43 @@
+desc: MIDI Pedal to Note
+
+// This plugin converts a CC change across a threshold to a note on / note off.
+// The idea is to be able to use e.g. a sustain pedal to trigger an instrument more easily.
+// Defaults: sustain pedal (CC 64) sends kick-drum low C.
+
+slider1:1<1,16,1>Minimum channel
+slider2:16<1,16,1>Maximum channel
+slider3:64<1,127,1>Receive CC
+slider4:48<1,127,1>Note number
+slider5:100<1,127,1>Velocity
+
+in_pin:none
+out_pin:none
+
+@init
+	on = 1;
+	notesOn = 0;
+
+@slider
+	minChannel = slider1 - 1;
+	maxChannel = slider2 - 1;
+	recvCC = slider3;
+	sendNote = slider4;
+	sendVel = slider5;
+
+@block
+	on ? (while (midirecv(offset, msg1, msg2, msg3) > 0) (
+
+		((msg1 & $xf0)==$xb0 && (msg2)==recvCC) ? (  // our selected CC
+			ccVal = msg3;
+			toOn = (ccVal >= 64);
+
+			(toOn != notesOn) ? (
+				notesOn = toOn;
+				class = toOn ? $x91 : $x81;
+				midisend(offset, class, sendNote, sendVel);
+			);
+		) : (  // otherwise just pass through
+			midisend(offset, msg1, msg2, msg3);
+		);
+
+	) );
